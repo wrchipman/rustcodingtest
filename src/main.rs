@@ -100,7 +100,16 @@ fn process_deposit(row: Row, client: &mut Client) {
     client.current_transactions.push(approved_trans);
 }
 fn process_withdrawal(row: Row, client: &mut Client) {
-
+    let amount = row.amount.parse().unwrap();
+    if client.available >= amount {
+        let approved_trans = ApprovedTransaction{
+            transaction_id: row.transaction_id,
+            amount: amount,
+            in_dispute: false
+        };
+        client.available = client.available - approved_trans.amount;
+        client.current_transactions.push(approved_trans);
+    }
 }
 fn process_dispute(row: Row, client: &mut Client) {
     
