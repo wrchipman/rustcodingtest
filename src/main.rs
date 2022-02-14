@@ -15,7 +15,6 @@ struct Row<'a> {
 #[derive(Debug)]
 #[derive(Deserialize)]
 struct ApprovedTransaction {
-    transaction_type: String,
     transaction_id: u32,
     amount: f32,
     in_dispute: bool
@@ -31,21 +30,15 @@ struct Client {
     locked: bool
 }
 
-fn read_csv(filename: String) -> Result<(), Box<dyn Error>> {
+fn read_csv(filename: String, mut clients: &mut Vec<Client>) -> Result<(), Box<dyn Error>> {
     // Build the CSV reader and iterate over each record.
-    let mut clients : Vec<Client> = Vec::new();
     let mut rdr = csv::Reader::from_path(filename)?;
     for result in rdr.records() {
         let record = result?;
         let row: Row = record.deserialize(None)?;
         process_record(row, &mut clients) 
     }
-    println!("client, available, held, total, locked");
-    for client in clients {
-        println!("{},{:.4},{:.4},{:.4},{}", client.client_id.to_string(), client.available, client.held, client.held + client.available, client.locked );
-        //println!("{:?}", client.current_transactions);
-    }
-    //println!("{:?}", clients);
+    
     Ok(())
 }
 
@@ -75,7 +68,6 @@ fn process_record(row: Row, clients: &mut Vec<Client>) {
         if !client_found {
             if transaction_type == "deposit"{
                 let approved_trans = ApprovedTransaction{
-                    transaction_type: transaction_type.to_string(),
                     transaction_id: transaction_id,
                     amount: amount,
                     in_dispute: false
@@ -96,12 +88,11 @@ fn process_record(row: Row, clients: &mut Vec<Client>) {
 fn process_deposit(row: Row, client: &mut Client) {
     if !client.locked {
         let approved_trans = ApprovedTransaction{
-            transaction_type: row.transaction_type.to_string(),
             transaction_id: row.transaction_id,
             amount: row.amount.parse().unwrap(),
             in_dispute: false
         };
-        client.available = client.available + approved_trans.amount;
+        client.available += approved_trans.amount;
         client.current_transactions.push(approved_trans);
     }
 }
@@ -110,14 +101,7 @@ fn process_withdrawal(row: Row, client: &mut Client) {
     if !client.locked {
         let amount = row.amount.parse().unwrap();
         if client.available >= amount {
-            let approved_trans = ApprovedTransaction{
-                transaction_type: row.transaction_type.to_string(),
-                transaction_id: row.transaction_id,
-                amount: amount,
-                in_dispute: false
-            };
-            client.available = client.available - approved_trans.amount;
-            client.current_transactions.push(approved_trans);
+            client.available -= amount;
         }
     }
 }
@@ -127,14 +111,8 @@ fn process_dispute(row: Row, client: &mut Client) {
         for trans in client.current_transactions.iter_mut() {
             if trans.transaction_id == row.transaction_id {
                 trans.in_dispute = true;
-                if trans.transaction_type == "deposit" {
-                    client.available -= trans.amount;
-                    client.held += trans.amount;
-                }
-                if trans.transaction_type == "withdrawal" {
-                    client.available += trans.amount;
-                    client.held -= trans.amount;
-                } 
+                client.available -= trans.amount;
+                client.held += trans.amount;   
             }
         }
     }
@@ -143,17 +121,10 @@ fn process_dispute(row: Row, client: &mut Client) {
 fn process_resolve(row: Row, client: &mut Client) {
     if !client.locked {
         for trans in client.current_transactions.iter_mut() {
-            if trans.transaction_id == row.transaction_id && 
-                trans.in_dispute {
+            if trans.transaction_id == row.transaction_id && trans.in_dispute {
                 trans.in_dispute = false;
-                if trans.transaction_type == "deposit" {
-                    client.available += trans.amount;
-                    client.held -= trans.amount;
-                }
-                if trans.transaction_type == "withdrawal" {
-                    client.available -= trans.amount;
-                    client.held += trans.amount;
-                } 
+                client.available += trans.amount;
+                client.held -= trans.amount;
             }
         }
     }
@@ -162,15 +133,9 @@ fn process_resolve(row: Row, client: &mut Client) {
 fn process_chargeback(row: Row, client: &mut Client) {
     if !client.locked {
         for trans in client.current_transactions.iter_mut() {
-            if trans.transaction_id == row.transaction_id && 
-                trans.in_dispute {
+            if trans.transaction_id == row.transaction_id && trans.in_dispute {
                 client.locked = true;
-                if trans.transaction_type == "deposit" {
-                    client.held -= trans.amount;
-                }
-                if trans.transaction_type == "withdrawal" {
-                    client.held += trans.amount;
-                } 
+                client.held -= trans.amount;
             }
         }
     }
@@ -178,11 +143,18 @@ fn process_chargeback(row: Row, client: &mut Client) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    println!("{:?}", args[1]);
     let filename = &args[1];
-    if let Err(err) = read_csv(filename.to_string()) {
+    let mut clients : Vec<Client> = Vec::new();
+
+    if let Err(err) = read_csv(filename.to_string(),&mut clients) {
         println!("error running readcsv: {}", err);
         process::exit(1);
+    }
+
+    println!("client, available, held, total, locked");
+    for client in clients {
+        println!("{},{:.4},{:.4},{:.4},{}", client.client_id.to_string(), client.available, client.held, client.held + client.available, client.locked );
+        //println!("{:?}", client.current_transactions);
     }
     
     
