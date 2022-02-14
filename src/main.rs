@@ -43,7 +43,7 @@ fn read_csv(filename: String) -> Result<(), Box<dyn Error>> {
     println!("client, available, held, total, locked");
     for client in clients {
         println!("{},{:.4},{:.4},{:.4},{}", client.client_id.to_string(), client.available, client.held, client.held + client.available, client.locked );
-        println!("{:?}", client.current_transactions);
+        //println!("{:?}", client.current_transactions);
     }
     //println!("{:?}", clients);
     Ok(())
@@ -67,7 +67,7 @@ fn process_record(row: Row, clients: &mut Vec<Client>) {
                     "dispute"=>process_dispute(row, &mut client),
                     "resolve"=>process_resolve(row, &mut client),
                     "chargeback"=>process_chargeback(row, &mut client),
-                    _=>process_invalid(row),
+                    _=>(),
                 };
                 break;
             }
@@ -94,54 +94,86 @@ fn process_record(row: Row, clients: &mut Vec<Client>) {
 }
 
 fn process_deposit(row: Row, client: &mut Client) {
-    let approved_trans = ApprovedTransaction{
-        transaction_type: row.transaction_type.to_string(),
-        transaction_id: row.transaction_id,
-        amount: row.amount.parse().unwrap(),
-        in_dispute: false
-    };
-    client.available = client.available + approved_trans.amount;
-    client.current_transactions.push(approved_trans);
-}
-
-fn process_withdrawal(row: Row, client: &mut Client) {
-    let amount = row.amount.parse().unwrap();
-    if client.available >= amount {
+    if !client.locked {
         let approved_trans = ApprovedTransaction{
             transaction_type: row.transaction_type.to_string(),
             transaction_id: row.transaction_id,
-            amount: amount,
+            amount: row.amount.parse().unwrap(),
             in_dispute: false
         };
-        client.available = client.available - approved_trans.amount;
+        client.available = client.available + approved_trans.amount;
         client.current_transactions.push(approved_trans);
     }
 }
 
+fn process_withdrawal(row: Row, client: &mut Client) {
+    if !client.locked {
+        let amount = row.amount.parse().unwrap();
+        if client.available >= amount {
+            let approved_trans = ApprovedTransaction{
+                transaction_type: row.transaction_type.to_string(),
+                transaction_id: row.transaction_id,
+                amount: amount,
+                in_dispute: false
+            };
+            client.available = client.available - approved_trans.amount;
+            client.current_transactions.push(approved_trans);
+        }
+    }
+}
+
 fn process_dispute(row: Row, client: &mut Client) {
-   for trans in client.current_transactions.iter_mut() {
-        if trans.transaction_id == row.transaction_id {
-            trans.in_dispute = true;
-            if trans.transaction_type == "deposit" {
-                client.available -= trans.amount;
-                client.held += trans.amount;
+    if !client.locked {
+        for trans in client.current_transactions.iter_mut() {
+            if trans.transaction_id == row.transaction_id {
+                trans.in_dispute = true;
+                if trans.transaction_type == "deposit" {
+                    client.available -= trans.amount;
+                    client.held += trans.amount;
+                }
+                if trans.transaction_type == "withdrawal" {
+                    client.available += trans.amount;
+                    client.held -= trans.amount;
+                } 
             }
-            if trans.transaction_type == "withdrawal" {
-                client.available += trans.amount;
-                client.held -= trans.amount;
-            } 
         }
     }
 }
 
 fn process_resolve(row: Row, client: &mut Client) {
-    
+    if !client.locked {
+        for trans in client.current_transactions.iter_mut() {
+            if trans.transaction_id == row.transaction_id && 
+                trans.in_dispute {
+                trans.in_dispute = false;
+                if trans.transaction_type == "deposit" {
+                    client.available += trans.amount;
+                    client.held -= trans.amount;
+                }
+                if trans.transaction_type == "withdrawal" {
+                    client.available -= trans.amount;
+                    client.held += trans.amount;
+                } 
+            }
+        }
+    }
 }
+
 fn process_chargeback(row: Row, client: &mut Client) {
-
-}
-fn process_invalid(row: Row) {
-
+    if !client.locked {
+        for trans in client.current_transactions.iter_mut() {
+            if trans.transaction_id == row.transaction_id && 
+                trans.in_dispute {
+                client.locked = true;
+                if trans.transaction_type == "deposit" {
+                    client.held -= trans.amount;
+                }
+                if trans.transaction_type == "withdrawal" {
+                    client.held += trans.amount;
+                } 
+            }
+        }
+    }
 }
 
 fn main() {
