@@ -31,14 +31,12 @@ struct Client {
 }
 
 fn read_csv(filename: String, mut clients: &mut Vec<Client>) -> Result<(), Box<dyn Error>> {
-    // Build the CSV reader and iterate over each record.
     let mut rdr = csv::Reader::from_path(filename)?;
     for result in rdr.records() {
         let record = result?;
         let row: Row = record.deserialize(None)?;
-        process_record(row, &mut clients) 
-    }
-    
+        process_record(row, &mut clients);  
+    }   
     Ok(())
 }
 
@@ -146,16 +144,13 @@ fn main() {
     let filename = &args[1];
     let mut clients : Vec<Client> = Vec::new();
 
-    if let Err(err) = read_csv(filename.to_string(),&mut clients) {
-        println!("error running readcsv: {}", err);
+    if let Err(err) = read_csv(filename.to_string(), &mut clients) {
+        println!("Error running readcsv: {}", err);
         process::exit(1);
     }
 
     println!("client, available, held, total, locked");
     for client in clients {
         println!("{},{:.4},{:.4},{:.4},{}", client.client_id.to_string(), client.available, client.held, client.held + client.available, client.locked );
-        //println!("{:?}", client.current_transactions);
-    }
-    
-    
+    }  
 }
