@@ -17,9 +17,12 @@ cargo run -- transactions.csv > accounts.csv
 ## Test files
 
 Test files included:
-transactions.csv - test file with multiple clients and multiple valid and invalid transactions
-transactions_single_account.csv - test file with a single client and multiple valid and invalid transactions
-transactions_single_account_errors.csv - test file with single client and multiple errors.
+
+# transactions.csv - test file with multiple clients and multiple valid and invalid transactions
+
+# transactions_single_account.csv - test file with a single client and multiple valid and invalid transactions
+
+# transactions_single_account_errors.csv - test file with single client and multiple errors.
 
 ## Error Handling and Assumptions
 
